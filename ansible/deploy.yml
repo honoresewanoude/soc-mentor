@@ -1,0 +1,51 @@
+---
+- name: Deploy SOC Mentor
+  hosts: docker_server
+  become: yes
+
+  vars:
+    app_name: soc-mentor
+    app_port: 5001
+    image_tar: /tmp/soc-mentor.tar
+
+  tasks:
+    - name: Installer Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Démarrer Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Copier l'image Docker
+      copy:
+        src: "{{ image_tar }}"
+        dest: "{{ image_tar }}"
+
+    - name: Arrêter l'ancien conteneur
+      command: docker rm -f {{ app_name }}
+      ignore_errors: yes
+
+    - name: Charger l'image Docker
+      command: docker load -i {{ image_tar }}
+
+    - name: Lancer SOC Mentor
+      command: >
+        docker run -d
+        --name {{ app_name }}
+        -p {{ app_port }}:{{ app_port }}
+        -e ANTHROPIC_API_KEY={{ lookup('env', 'ANTHROPIC_API_KEY') }}
+        --restart unless-stopped
+        soc-mentor:latest
+
+    - name: Vérifier que le conteneur tourne
+      command: docker ps --filter name={{ app_name }} --format "table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}"
+      register: container_status
+
+    - name: Afficher le statut
+      debug:
+        msg: "{{ container_status.stdout }}"

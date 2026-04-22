@@ -1,0 +1,41 @@
+stages:
+  - security
+  - build
+  - deploy
+
+variables:
+  IMAGE_NAME: "soc-mentor"
+  APP_PORT: "5001"
+
+# ─── STAGE 1 : Analyse de sécurité ───────────────────────────────────────────
+security_scan:
+  stage: security
+  script:
+    - pip3 install bandit --break-system-packages
+    - export PATH=$PATH:/home/gitlab-runner/.local/bin
+    # Scan complet avec rapport
+    - bandit -r app.py parser.py mitre_kb.py llm_engine.py config.py -f txt -o bandit-report.txt || true
+    - cat bandit-report.txt
+    # Blocage si vulnérabilité HIGH détectée
+    - bandit -r app.py parser.py mitre_kb.py llm_engine.py config.py --severity-level high -f txt
+  artifacts:
+    paths:
+      - bandit-report.txt
+    when: always
+
+# ─── STAGE 2 : Build image Docker ────────────────────────────────────────────
+docker_build:
+  stage: build
+  script:
+    - docker build -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - docker tag $IMAGE_NAME:$CI_COMMIT_SHORT_SHA $IMAGE_NAME:latest
+    - docker save $IMAGE_NAME:latest -o /tmp/soc-mentor.tar
+    - echo "Image $IMAGE_NAME:latest construite avec succès"
+
+# ─── STAGE 3 : Déploiement Ansible ───────────────────────────────────────────
+ansible_deploy:
+  stage: deploy
+  script:
+    - ansible-playbook ansible/deploy.yml -i ansible/inventory.ini
+  only:
+    - main
