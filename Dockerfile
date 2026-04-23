@@ -8,22 +8,18 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. OPTIMISATION CRITIQUE : Forcer Torch en version CPU avant le reste
-# Cela évite de télécharger 4Go de drivers NVIDIA inutiles dans ton SOC
+# 2. OPTIMISATION ET CORRECTIFS (Taille + Compatibilité NumPy)
+# On force Torch CPU pour gagner 4 Go
 RUN pip install --no-cache-dir torch==2.2.1+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+# On force NumPy < 2.0 pour éviter le crash de ChromaDB (l'AttributeError : np.float_)
+RUN pip install --no-cache-dir "numpy<2.0.0"
 
-# 3. Install Python dependencies (le reste de ton requirements.txt)
+# 3. Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 4. Copy application files
-COPY app.py .
-COPY config.py .
-COPY parser.py .
-COPY mitre_kb.py .
-COPY llm_engine.py .
-# Ajoute le nouveau fichier RAG s'il n'y est pas
-COPY rag_engine.py . 
+COPY app.py config.py parser.py mitre_kb.py llm_engine.py rag_engine.py ./
 COPY templates/ templates/
 COPY data/ data/
 
