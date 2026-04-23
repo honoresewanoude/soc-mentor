@@ -2,20 +2,28 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y openssh-client build-essential && rm -rf /var/lib/apt/lists/*
+# Dépendances système
+RUN apt-get update && apt-get install -y \
+    openssh-client \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# On installe torch-cpu d'abord pour le poids
-RUN pip install --no-cache-dir torch==2.2.1+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+# Installer torch CPU (avant le reste pour éviter conflits lourds)
+RUN pip install --no-cache-dir torch==2.2.1+cpu \
+    --extra-index-url https://download.pytorch.org/whl/cpu
 
+# Copier les requirements
 COPY requirements.txt .
 
-# LA LIGNE MAGIQUE : On force httpx juste avant de copier le code
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -U "httpx>=0.27.0" "httpcore>=1.0.0" "numpy<2.0.0"
+# Installer les dépendances (SANS override derrière)
+RUN pip install --no-cache-dir -r requirements.txt
 
+# Copier le code
 COPY . .
 
+# Config
 EXPOSE 5001
 ENV ANTHROPIC_API_KEY=""
 
+# Lancer l'app
 CMD ["python", "app.py"]
