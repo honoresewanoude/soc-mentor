@@ -13,10 +13,8 @@ security_scan:
   script:
     - pip3 install bandit --break-system-packages
     - export PATH=$PATH:/home/gitlab-runner/.local/bin
-    # Scan complet avec rapport
     - bandit -r app.py parser.py mitre_kb.py llm_engine.py config.py -f txt -o bandit-report.txt || true
     - cat bandit-report.txt
-    # Blocage si vulnérabilité HIGH détectée
     - bandit -r app.py parser.py mitre_kb.py llm_engine.py config.py --severity-level high -f txt
   artifacts:
     paths:
@@ -27,15 +25,23 @@ security_scan:
 docker_build:
   stage: build
   script:
-    - docker build -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - echo "🛠️ Build Docker sans cache..."
+    - docker build --no-cache -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
     - docker tag $IMAGE_NAME:$CI_COMMIT_SHORT_SHA $IMAGE_NAME:latest
+
+    - echo "🔍 Vérification des versions critiques..."
+    - docker run --rm $IMAGE_NAME:$CI_COMMIT_SHORT_SHA pip freeze | grep httpx
+    - docker run --rm $IMAGE_NAME:$CI_COMMIT_SHORT_SHA pip freeze | grep httpcore
+    - docker run --rm $IMAGE_NAME:$CI_COMMIT_SHORT_SHA pip freeze | grep anthropic
+
     - docker save $IMAGE_NAME:latest -o /tmp/soc-mentor.tar
-    - echo "Image $IMAGE_NAME:latest construite avec succès"
+    - echo "✅ Image $IMAGE_NAME:latest construite avec succès"
 
 # ─── STAGE 3 : Déploiement Ansible ───────────────────────────────────────────
 ansible_deploy:
   stage: deploy
   script:
+    - echo "🚀 Déploiement via Ansible..."
     - ansible-playbook ansible/deploy.yml -i ansible/inventory.ini
   only:
     - main

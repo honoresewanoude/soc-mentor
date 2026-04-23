@@ -30,8 +30,20 @@
       command: docker rm -f {{ app_name }}
       ignore_errors: yes
 
+    - name: Supprimer ancienne image
+      command: docker rmi -f {{ app_name }}:latest
+      ignore_errors: yes
+
     - name: Charger l'image Docker
       command: docker load -i {{ image_tar }}
+
+    - name: Vérifier image chargée
+      command: docker images | grep {{ app_name }}
+      register: image_check
+
+    - name: Debug image
+      debug:
+        msg: "{{ image_check.stdout }}"
 
     - name: Lancer SOC Mentor
       command: >
@@ -40,7 +52,7 @@
         -p {{ app_port }}:{{ app_port }}
         -e ANTHROPIC_API_KEY={{ lookup('env', 'ANTHROPIC_API_KEY') }}
         --restart unless-stopped
-        soc-mentor:latest
+        {{ app_name }}:latest
 
     - name: Vérifier que le conteneur tourne
       command: docker ps --filter name={{ app_name }} --format "table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}"
