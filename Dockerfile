@@ -8,11 +8,11 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. OPTIMISATION ET CORRECTIFS (Taille + Compatibilité NumPy)
-# On force Torch CPU pour gagner 4 Go
+# 2. OPTIMISATION ET CORRECTIFS (Taille + NumPy + Anthropic/Httpx)
 RUN pip install --no-cache-dir torch==2.2.1+cpu --extra-index-url https://download.pytorch.org/whl/cpu
-# On force NumPy < 2.0 pour éviter le crash de ChromaDB (l'AttributeError : np.float_)
 RUN pip install --no-cache-dir "numpy<2.0.0"
+# FIX CRITIQUE : Force la mise à jour de httpx pour Anthropic
+RUN pip install --no-cache-dir -U httpx httpcore
 
 # 3. Install Python dependencies
 COPY requirements.txt .
