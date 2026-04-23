@@ -209,3 +209,4 @@ __marimo__/
 outputs/
 __pycache__/
 .env_token
+venv/
