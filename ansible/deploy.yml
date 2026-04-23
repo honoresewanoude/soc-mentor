@@ -21,12 +21,12 @@
         state: started
         enabled: yes
 
-    - name: Copier l'image Docker
+    - name: Copier image Docker
       copy:
         src: "{{ image_tar }}"
         dest: "{{ image_tar }}"
 
-    - name: Arrêter l'ancien conteneur
+    - name: Stop container existant
       command: docker rm -f {{ app_name }}
       ignore_errors: yes
 
@@ -34,18 +34,18 @@
       command: docker rmi -f {{ app_name }}:latest
       ignore_errors: yes
 
-    - name: Charger l'image Docker
+    - name: Charger image Docker
       command: docker load -i {{ image_tar }}
 
-    - name: Vérifier image chargée
-      command: docker images | grep {{ app_name }}
+    - name: Vérifier image
+      command: docker images {{ app_name }}
       register: image_check
 
     - name: Debug image
       debug:
         msg: "{{ image_check.stdout }}"
 
-    - name: Lancer SOC Mentor
+    - name: Lancer container
       command: >
         docker run -d
         --name {{ app_name }}
@@ -54,10 +54,10 @@
         --restart unless-stopped
         {{ app_name }}:latest
 
-    - name: Vérifier que le conteneur tourne
-      command: docker ps --filter name={{ app_name }} --format "table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}"
+    - name: Vérifier container
+      command: docker ps --filter name={{ app_name }} --format "{{ '{{' }}.Names{{ '}}' }} {{ '{{' }}.Status{{ '}}' }}"
       register: container_status
 
-    - name: Afficher le statut
+    - name: Status
       debug:
         msg: "{{ container_status.stdout }}"
