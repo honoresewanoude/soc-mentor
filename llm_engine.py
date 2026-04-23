@@ -1,120 +1,95 @@
 import anthropic
+import os
 from config import ANTHROPIC_API_KEY, MODEL, MAX_TOKENS
-from mitre_kb import get_mitre_context
+from rag_engine import retrieve_mitre_context
 
+# Initialisation du client Anthropic
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-SYSTEM_PROMPT = """Tu es un analyste SOC senior avec 10 ans d'expérience.
-Tu reçois une alerte de sécurité avec son contexte MITRE ATT&CK.
-Tu dois générer une fiche d'investigation structurée en français pour aider un analyste N1/N2.
-Sois précis, concis et actionnable. Utilise uniquement les informations fournies."""
+SYSTEM_PROMPT = """Tu es un analyste SOC senior (Expert Incident Response).
+Tu reçois une alerte technique de Wazuh enrichie par un moteur RAG (MITRE ATT&CK).
+Ton rôle est de transformer ces données brutes en une fiche d'investigation actionnable.
+Sois précis, utilise un ton professionnel et structure ta réponse en Markdown."""
 
 def build_prompt(alert, mitre_context):
     """
-    Construit le prompt enrichi avec l'alerte et le contexte MITRE.
+    Assemble l'alerte et le contexte récupéré par ChromaDB pour créer le prompt final.
     """
+    # Formatage du contexte MITRE récupéré par le RAG
     mitre_text = ""
-    for m in mitre_context:
-        mitre_text += f"""
-Technique : {m.get('id', 'N/A')} — {m['name']}
-Tactique   : {m['tactic']}
-Description: {m['description']}
-Détection  : {m['detection']}
-Mitigation : {m['mitigation']}
-IoC types  : {', '.join(m['ioc'])}
-"""
+    if mitre_context:
+        for m in mitre_context:
+            mitre_text += f"\n- TECHNIQUE {m['id']} : {m['text']}"
+    else:
+        mitre_text = "Aucun contexte spécifique trouvé dans la base de connaissances."
 
     return f"""
-ALERTE DE SÉCURITÉ
-==================
-ID         : {alert['id']}
-Timestamp  : {alert['timestamp']}
-Agent      : {alert['agent_name']} ({alert['agent_ip']})
-Règle ID   : {alert['rule_id']}
-Niveau     : {alert['rule_level']}/15
-Description: {alert['rule_description']}
-Groupes    : {', '.join(alert['rule_groups'])}
-Log brut   : {alert['full_log']}
+### DONNÉES DE L'ALERTE
+- **Description** : {alert.get('rule_description', 'N/A')}
+- **Niveau Wazuh** : {alert.get('rule_level', 'N/A')}
+- **Agent** : {alert.get('agent_name', 'Inconnu')}
+- **Log Complet** : `{alert.get('full_log', 'N/A')}`
 
-CONTEXTE MITRE ATT&CK
-=====================
-{mitre_text if mitre_text else 'Aucun TTP MITRE identifié'}
+### CONTEXTE MITRE ATT&CK (Récupéré via RAG)
+{mitre_text}
 
-INSTRUCTIONS
-============
-Génère une fiche d'investigation SOC avec exactement cette structure :
-
-RÉSUMÉ
-------
-[2-3 phrases résumant l'incident]
-
-NIVEAU DE CRITICITÉ
--------------------
-[CRITIQUE / ÉLEVÉ / MOYEN / FAIBLE] — [justification en 1 phrase]
-
-TTP MITRE IMPLIQUÉS
--------------------
-[Liste des techniques avec leur signification]
-
-INDICATEURS CLÉS À VÉRIFIER
------------------------------
-[Liste de 3-5 éléments concrets à vérifier]
-
-ACTIONS IMMÉDIATES (N1)
-------------------------
-[Liste numérotée de 3-5 actions à faire maintenant]
-
-CONDITIONS D'ESCALADE VERS N2
--------------------------------
-[Liste de 3 conditions qui nécessitent d'escalader]
-
-COMMANDES D'INVESTIGATION
---------------------------
-[2-3 commandes Linux/shell utiles pour investiguer]
+---
+### INSTRUCTIONS DE RÉDACTION
+Génère une fiche d'investigation avec les sections suivantes :
+1. **RÉSUMÉ DE L'INCIDENT** (Analyse de la menace en 2 lignes)
+2. **CRITICITÉ** (Faible/Moyen/Elevé/Critique + Justification)
+3. **VÉRIFICATIONS PRIORITAIRES** (3 points techniques à checker immédiatement)
+4. **PLAN DE REMÉDIATION** (Actions concrètes pour stopper l'attaque)
+5. **REQUÊTE DE CHASSE (Hunting)** (Exemple de commande ou log à chercher ailleurs)
 """
 
 def analyze_alert(alert):
     """
-    Analyse une alerte et retourne la fiche réflexe générée par Claude.
+    Fonction principale appelée par app.py pour obtenir l'analyse de l'IA.
     """
     try:
-        mitre_context = get_mitre_context(alert.get("mitre_id", []))
-        prompt = build_prompt(alert, mitre_context)
+        # 1. On interroge le moteur RAG pour avoir les techniques MITRE proches
+        mitre_context = retrieve_mitre_context(alert)
+        
+        # 2. On construit le message enrichi
+        prompt_content = build_prompt(alert, mitre_context)
 
+        # 3. Envoi à Claude
         message = client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,
             messages=[
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt_content}
             ]
         )
 
         return {
             "success": True,
-            "alert_id": alert["id"],
-            "agent": alert["agent_name"],
-            "rule_description": alert["rule_description"],
-            "rule_level": alert["rule_level"],
             "fiche": message.content[0].text,
-            "tokens_used": message.usage.input_tokens + message.usage.output_tokens
+            "tokens_used": message.usage.input_tokens + message.usage.output_tokens,
+            "mitre_found": [m['id'] for m in mitre_context]
         }
 
     except Exception as e:
+        print(f"Erreur LLM Engine : {str(e)}")
         return {
             "success": False,
-            "alert_id": alert.get("id", "N/A"),
             "error": str(e),
-            "fiche": None
+            "fiche": "Désolé, l'analyse automatique n'est pas disponible pour le moment."
         }
 
+# Bloc de test rapide
 if __name__ == "__main__":
-    from parser import get_simulated_alerts
-    print("=== Test LLM Engine ===")
-    alerts = get_simulated_alerts()
-    result = analyze_alert(alerts[0])
+    test_alert = {
+        "rule_description": "sshd: repeated authentication failures",
+        "full_log": "Jan 10 10:00:01 kali sshd[1234]: Failed password for root from 192.168.1.50 port 54321 ssh2",
+        "rule_level": 10,
+        "agent_name": "serveur-prod"
+    }
+    print("Test de l'analyse avec RAG en cours...")
+    result = analyze_alert(test_alert)
     if result["success"]:
-        print(f"Tokens utilisés : {result['tokens_used']}")
-        print("\n" + result["fiche"])
-    else:
-        print(f"Erreur : {result['error']}")
+        print(f"Succès ! Techniques identifiées : {result['mitre_found']}")
+        print("-" * 30)
+        print(result["fiche"])
