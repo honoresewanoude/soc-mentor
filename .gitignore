@@ -210,3 +210,5 @@ outputs/
 __pycache__/
 .env_token
 venv/
+id_rsa_new
+id_rsa_new.pub
