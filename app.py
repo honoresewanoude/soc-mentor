@@ -10,26 +10,45 @@ load_dotenv()
 app = Flask(__name__)
 analysis_cache = {}
 
+
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.route('/api/alerts')
 def get_alerts():
     source = request.args.get('source', 'simulated')
     try:
         if source == 'wazuh':
+            # Les exceptions SSH sont maintenant propagées avec un message clair
             alerts = get_wazuh_alerts_ssh()
-            if not alerts:
-                # Fallback sur simulé si Wazuh inaccessible
-                alerts = get_simulated_alerts()[:1]
-                alerts[0]["rule_description"] = "Alerte simulée (Wazuh inaccessible)"
-                alerts[0]["id"] = "WAZUH-KO"
         else:
             alerts = get_simulated_alerts()
+
         return jsonify({"success": True, "alerts": alerts, "source": source})
+
+    except FileNotFoundError as e:
+        # Clé SSH introuvable → message explicite pour l'UI
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "alerts": [],
+            "hint": "Vérifiez que SSH_KEY_PATH est correct dans .env et que le fichier est monté dans Docker."
+        }), 200
+
+    except ConnectionError as e:
+        # SSH joignable mais connexion refusée / timeout
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "alerts": [],
+            "hint": "Vérifiez que WAZUH_HOST et WAZUH_SSH_USER sont corrects dans .env, et que le conteneur tourne en --network host."
+        }), 200
+
     except Exception as e:
-        return jsonify({"success": False, "error": str(e), "alerts": []})
+        return jsonify({"success": False, "error": str(e), "alerts": []}), 200
+
 
 @app.route('/api/analyze/<alert_id>', methods=['POST'])
 def analyze(alert_id):
@@ -44,12 +63,14 @@ def analyze(alert_id):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+
 @app.route('/api/stats')
 def stats():
     return jsonify({
         "total_analyzed": len(analysis_cache),
         "cached": list(analysis_cache.keys())
     })
+
 
 if __name__ == '__main__':
     app.run(host=APP_HOST, port=APP_PORT, debug=False)  # nosec B104

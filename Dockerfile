@@ -15,15 +15,23 @@ RUN pip install --no-cache-dir torch==2.2.1+cpu \
 # Copier les requirements
 COPY requirements.txt .
 
-# Installer les dépendances (SANS override derrière)
+# Installer les dépendances
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copier le code
 COPY . .
 
-# Config
-EXPOSE 5001
-ENV ANTHROPIC_API_KEY=""
+# Créer le dossier pour la clé SSH (montée via volume)
+RUN mkdir -p /app/ssh
 
-# Lancer l'app
+EXPOSE 5001
+
+# Variables d'environnement (à surcharger via .env ou docker-compose)
+ENV ANTHROPIC_API_KEY=""
+ENV SSH_KEY_PATH="/app/ssh/id_rsa"
+ENV WAZUH_HOST="172.16.1.10"
+ENV WAZUH_SSH_USER="msh"
+ENV APP_HOST="0.0.0.0"
+ENV APP_PORT="5001"
+
 CMD ["python", "app.py"]

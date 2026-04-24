@@ -1,11 +1,16 @@
 import json
 import paramiko  # nosec B402
 import urllib3
+import os
 from datetime import datetime
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+
 def parse_wazuh_alert(alert_json):
+    """
+    Transforme le JSON brut de Wazuh en un dictionnaire structuré pour SOC Mentor.
+    """
     alert = alert_json if isinstance(alert_json, dict) else json.loads(alert_json)
     return {
         "id": alert.get("id", f"WZ-{datetime.now().strftime('%H%M%S')}"),
@@ -24,18 +29,41 @@ def parse_wazuh_alert(alert_json):
         "data": alert.get("data", {})
     }
 
-def get_wazuh_alerts_ssh(host="172.16.1.10", user="msh", key="/home/msh-cyber/.ssh/id_rsa", limit=20):
+
+def get_wazuh_alerts_ssh(host=None, user=None, key=None, limit=20):
     """
-    Récupère les vraies alertes Wazuh via SSH en lisant alerts.json directement.
+    Récupère les alertes Wazuh via SSH.
+    Toutes les valeurs sensibles sont lues depuis les variables d'environnement.
     """
+    # Lecture depuis .env — aucune valeur hardcodée
+    host = host or os.getenv("WAZUH_HOST", "172.16.1.10")
+    user = user or os.getenv("WAZUH_USER", "msh")       # même var que dans .env
+    key  = key  or os.getenv("SSH_KEY_PATH", "/app/id_rsa")  # même chemin que dans .env
+
+    print(f"[SSH] Connexion → {user}@{host} (clé: {key})")
+
+    # Vérification que la clé existe avant de tenter la connexion
+    if not os.path.exists(key):
+        msg = f"Clé SSH introuvable : {key}. Vérifiez SSH_KEY_PATH dans .env et le volume Docker."
+        print(f"[!] {msg}")
+        raise FileNotFoundError(msg)
+
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507
         client.connect(host, username=user, key_filename=key, timeout=5)
-        cmd = f"sudo tail -n 200 /var/ossec/logs/alerts/alerts.json 2>/dev/null | grep '^{{' | tail -n {limit}"
+
+        cmd = (
+            f"sudo tail -n 200 /var/ossec/logs/alerts/alerts.json 2>/dev/null "
+            f"| grep '^{{' | tail -n {limit}"
+        )
         stdin, stdout, stderr = client.exec_command(cmd)  # nosec B601
         output = stdout.read().decode().strip()
+        err    = stderr.read().decode().strip()
         client.close()
+
+        if err:
+            print(f"[SSH] stderr: {err}")
 
         alerts = []
         for line in output.split('\n'):
@@ -45,15 +73,24 @@ def get_wazuh_alerts_ssh(host="172.16.1.10", user="msh", key="/home/msh-cyber/.s
             try:
                 raw = json.loads(line)
                 alerts.append(parse_wazuh_alert(raw))
-            except:
+            except json.JSONDecodeError:
                 continue
+
+        print(f"[SSH] {len(alerts)} alertes récupérées")
         return alerts
 
+    except FileNotFoundError:
+        raise  # re-propagé pour affichage dans l'UI
     except Exception as e:
-        print(f"[!] Erreur SSH Wazuh: {e}")
-        return []
+        msg = f"Connexion SSH échouée ({user}@{host}) : {e}"
+        print(f"[!] {msg}")
+        raise ConnectionError(msg)
+
 
 def get_simulated_alerts():
+    """
+    Alertes de test pour le développement local (sans Wazuh).
+    """
     return [
         {
             "id": "SIM-001",
@@ -102,43 +139,19 @@ def get_simulated_alerts():
             "full_log": "ossec: output: netstat: tcp 0.0.0.0:5001 0.0.0.0:* LISTEN",
             "location": "netstat listening ports",
             "data": {}
-        },
-        {
-            "id": "SIM-004",
-            "timestamp": datetime.now().isoformat(),
-            "agent_name": "msh-cyber",
-            "agent_ip": "172.16.1.1",
-            "rule_id": "510",
-            "rule_level": 7,
-            "rule_description": "Host-based anomaly detection event (rootcheck).",
-            "rule_groups": ["ossec", "rootcheck"],
-            "mitre_id": ["T1059"],
-            "mitre_technique": ["Command and Scripting Interpreter"],
-            "mitre_tactic": ["Execution"],
-            "full_log": "Trojaned version of file '/bin/diff' detected.",
-            "location": "rootcheck",
-            "data": {}
-        },
-        {
-            "id": "SIM-005",
-            "timestamp": datetime.now().isoformat(),
-            "agent_name": "gitserver",
-            "agent_ip": "172.16.1.20",
-            "rule_id": "5501",
-            "rule_level": 3,
-            "rule_description": "PAM: Login session opened for gitlab-runner.",
-            "rule_groups": ["pam", "authentication_success"],
-            "mitre_id": ["T1078"],
-            "mitre_technique": ["Valid Accounts"],
-            "mitre_tactic": ["Defense Evasion", "Persistence"],
-            "full_log": "pam_unix(su:session): session opened for user gitlab-runner(uid=990) by (uid=0)",
-            "location": "/var/log/auth.log",
-            "data": {}
         }
     ]
 
+
 if __name__ == "__main__":
-    print("=== Test alertes simulées ===")
-    alerts = get_simulated_alerts()
-    for a in alerts:
+    print("=== Test SOC Mentor Parser ===")
+    sim_alerts = get_simulated_alerts()
+    for a in sim_alerts:
         print(f"[{a['rule_level']}] {a['agent_name']} — {a['rule_description']}")
+
+    print("\n--- Tentative SSH Wazuh ---")
+    try:
+        ssh_alerts = get_wazuh_alerts_ssh()
+        print(f"{len(ssh_alerts)} alerte(s) récupérée(s)")
+    except Exception as e:
+        print(f"SSH non disponible : {e}")

@@ -1,0 +1,11 @@
+services:
+  soc-mentor:
+    build: .
+    # Accès au réseau du host pour atteindre 172.16.1.x (lab Wazuh)
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      # SSH_KEY_PATH=/app/id_rsa dans .env → monté ici au même chemin
+      - ./id_rsa:/app/id_rsa:ro
+    restart: unless-stopped
