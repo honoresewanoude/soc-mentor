@@ -212,3 +212,7 @@ __pycache__/
 venv/
 id_rsa_new
 id_rsa_new.pub
+id_rsa
+id_rsa_new
+id_rsa_new.pub
+*.pub
