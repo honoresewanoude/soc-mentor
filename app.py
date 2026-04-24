@@ -21,33 +21,26 @@ def get_alerts():
     source = request.args.get('source', 'simulated')
     try:
         if source == 'wazuh':
-            # Les exceptions SSH sont maintenant propagées avec un message clair
             alerts = get_wazuh_alerts_ssh()
+            if not alerts:
+                # Fallback silencieux sur simulé si Wazuh inaccessible
+                alerts = get_simulated_alerts()
+                alerts[0]["rule_description"] += " (Wazuh inaccessible — mode simulé)"
         else:
             alerts = get_simulated_alerts()
 
         return jsonify({"success": True, "alerts": alerts, "source": source})
 
-    except FileNotFoundError as e:
-        # Clé SSH introuvable → message explicite pour l'UI
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "alerts": [],
-            "hint": "Vérifiez que SSH_KEY_PATH est correct dans .env et que le fichier est monté dans Docker."
-        }), 200
-
-    except ConnectionError as e:
-        # SSH joignable mais connexion refusée / timeout
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "alerts": [],
-            "hint": "Vérifiez que WAZUH_HOST et WAZUH_SSH_USER sont corrects dans .env, et que le conteneur tourne en --network host."
-        }), 200
-
     except Exception as e:
-        return jsonify({"success": False, "error": str(e), "alerts": []}), 200
+        # En cas d'erreur SSH → fallback silencieux sur simulé
+        print(f"[!] Wazuh inaccessible : {e} — fallback simulé")
+        alerts = get_simulated_alerts()
+        return jsonify({
+            "success": True,
+            "alerts": alerts,
+            "source": "simulated",
+            "warning": f"Wazuh inaccessible : {str(e)}"
+        })
 
 
 @app.route('/api/analyze/<alert_id>', methods=['POST'])

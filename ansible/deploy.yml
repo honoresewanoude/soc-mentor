@@ -7,6 +7,9 @@
     app_name: soc-mentor
     app_port: 5001
     image_tar: /tmp/soc-mentor.tar
+    ssh_key_src: /home/gitlab-runner/.ssh/wazuh_id_rsa
+    # Reçue depuis --extra-vars dans le pipeline GitLab
+    anthropic_api_key: ""
 
   tasks:
     - name: Installer Docker
@@ -26,6 +29,20 @@
         src: "{{ image_tar }}"
         dest: "{{ image_tar }}"
 
+    - name: Créer dossier clé SSH
+      file:
+        path: /opt/soc-mentor
+        state: directory
+        mode: '0700'
+
+    - name: Copier clé SSH Wazuh
+      copy:
+        src: "{{ ssh_key_src }}"
+        dest: /opt/soc-mentor/id_rsa
+        mode: '0600'
+        owner: root
+        group: root
+
     - name: Stop container existant
       command: docker rm -f {{ app_name }}
       ignore_errors: yes
@@ -37,25 +54,31 @@
     - name: Charger image Docker
       command: docker load -i {{ image_tar }}
 
-    - name: Vérifier image
-      command: docker images {{ app_name }}
-      register: image_check
-
-    - name: Debug image
-      debug:
-        msg: "{{ image_check.stdout }}"
+    - name: Nettoyer tar après chargement
+      file:
+        path: "{{ image_tar }}"
+        state: absent
 
     - name: Lancer container
       command: >
         docker run -d
         --name {{ app_name }}
-        -p {{ app_port }}:{{ app_port }}
-        -e ANTHROPIC_API_KEY={{ lookup('env', 'ANTHROPIC_API_KEY') }}
+        --network host
+        -v /opt/soc-mentor/id_rsa:/app/id_rsa:ro
+        -e ANTHROPIC_API_KEY={{ anthropic_api_key }}
+        -e WAZUH_HOST=172.16.1.10
+        -e WAZUH_USER=msh
+        -e SSH_KEY_PATH=/app/id_rsa
+        -e APP_PORT={{ app_port }}
         --restart unless-stopped
         {{ app_name }}:latest
 
+    - name: Attendre démarrage (5s)
+      pause:
+        seconds: 5
+
     - name: Vérifier container
-      command: docker ps --filter name={{ app_name }} --format "{{ '{{' }}.Names{{ '}}' }} {{ '{{' }}.Status{{ '}}' }}"
+      command: docker ps --filter name={{ app_name }} --format "{{'{{'}} .Names {{'}}'}} {{'{{'}} .Status {{'}}'}}"
       register: container_status
 
     - name: Status
