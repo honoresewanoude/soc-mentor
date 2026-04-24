@@ -1,9 +1,9 @@
-# ── Core (utilisé par app.py) ─────────────────────────────────
 anthropic==0.21.3
 flask==3.0.2
 python-dotenv==1.0.1
 paramiko==3.4.0
 httpx==0.26.0
-chromadb==0.4.24
-sentence-transformers==2.6.1
-numpy<2.0.0
+urllib3>=1.26.0
+
+# RAG — local uniquement (trop lourd pour Docker ~3GB)
+# Pour activer en local : pip install -r requirements-rag.txt
