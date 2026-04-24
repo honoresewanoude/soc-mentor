@@ -216,3 +216,4 @@ id_rsa
 id_rsa_new
 id_rsa_new.pub
 *.pub
+id_rsa.pub
