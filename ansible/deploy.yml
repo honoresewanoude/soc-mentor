@@ -8,8 +8,6 @@
     app_port: 5001
     image_tar: /tmp/soc-mentor.tar
     ssh_key_src: /home/gitlab-runner/.ssh/wazuh_id_rsa
-    # Reçue depuis --extra-vars dans le pipeline GitLab
-    anthropic_api_key: ""
 
   tasks:
     - name: Installer Docker
@@ -29,7 +27,7 @@
         src: "{{ image_tar }}"
         dest: "{{ image_tar }}"
 
-    - name: Créer dossier clé SSH
+    - name: Créer dossier secrets
       file:
         path: /opt/soc-mentor
         state: directory
@@ -39,6 +37,14 @@
       copy:
         src: "{{ ssh_key_src }}"
         dest: /opt/soc-mentor/id_rsa
+        mode: '0600'
+        owner: root
+        group: root
+
+    - name: Copier fichier .env secrets
+      copy:
+        src: /home/gitlab-runner/.env-soc-mentor
+        dest: /opt/soc-mentor/.env
         mode: '0600'
         owner: root
         group: root
@@ -65,7 +71,7 @@
         --name {{ app_name }}
         --network host
         -v /opt/soc-mentor/id_rsa:/app/id_rsa:ro
-        -e ANTHROPIC_API_KEY={{ anthropic_api_key }}
+        --env-file /opt/soc-mentor/.env
         -e WAZUH_HOST=172.16.1.10
         -e WAZUH_USER=msh
         -e SSH_KEY_PATH=/app/id_rsa
