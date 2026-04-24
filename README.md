@@ -310,7 +310,7 @@ La bibliothèque `cryptography` (version récente) a déprécié le support DSA.
 
 ## Auteur
 
-**Honoré Sèwanoudé MITCHOZOUNNOU** — Futur ingénieur ESIR Rennes (Cybersécurité & Réseaux)  
+**Honoré Sèwanoudé MITCHOZOUNNOU** - Futur ingénieur ESIR Rennes (Cybersécurité & Réseaux)  
 - Portfolio : [honoresewanoude.github.io](https://honoresewanoude.github.io)  
 - Email : honoresewanoude@gmail.com
 
