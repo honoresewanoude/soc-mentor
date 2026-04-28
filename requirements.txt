@@ -6,3 +6,4 @@ urllib3>=1.26.0
 
 # RAG — local uniquement (trop lourd pour Docker ~3GB)
 # Pour activer en local : pip install -r requirements-rag.txt
+requests
