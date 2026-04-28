@@ -1,7 +1,7 @@
 import json
 from flask import Flask, render_template, jsonify, request
 from dotenv import load_dotenv
-from parser import get_wazuh_alerts_api
+from parser import get_wazuh_alerts_api, get_simulated_alerts
 from llm_engine import analyze_alert
 from config import APP_HOST, APP_PORT
 
