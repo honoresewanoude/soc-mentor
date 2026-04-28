@@ -1,7 +1,7 @@
 import json
 from flask import Flask, render_template, jsonify, request
 from dotenv import load_dotenv
-from parser import get_simulated_alerts, get_wazuh_alerts_ssh
+from parser import get_wazuh_alerts_api
 from llm_engine import analyze_alert
 from config import APP_HOST, APP_PORT
 
@@ -21,7 +21,7 @@ def get_alerts():
     source = request.args.get('source', 'simulated')
     try:
         if source == 'wazuh':
-            alerts = get_wazuh_alerts_ssh()
+            alerts = get_wazuh_alerts_api()
             if not alerts:
                 # Fallback silencieux sur simulé si Wazuh inaccessible
                 alerts = get_simulated_alerts()
