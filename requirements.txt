@@ -1,7 +1,6 @@
 anthropic==0.21.3
 flask==3.0.2
 python-dotenv==1.0.1
-paramiko==3.4.0
 httpx==0.26.0
 urllib3>=1.26.0
 
